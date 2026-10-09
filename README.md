@@ -7,3 +7,9 @@
 - 不依赖后端服务或云端 API。
 
 直接打开 `index.html` 或使用 Netlify 部署即可。
+
+## 产品资料
+
+- [产品基线](PRODUCT.md)
+- [竞品分析](docs/competitive-analysis.md)
+- [v1.4 工作台改版 PRD](docs/PRD-v1.4-redesign.md)
