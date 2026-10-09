@@ -298,6 +298,85 @@ h1 {
   flex: 1 1 100%;
 }
 
+#gridControls .grid-wide {
+  grid-column: 1 / -1;
+}
+
+#gridControls [hidden],
+#gridDesignControls [hidden],
+#gridDesignControls.hidden {
+  display: none !important;
+}
+
+#gridDesignControls {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  padding: 12px 16px !important;
+}
+
+#gridDesignControls > div {
+  min-width: 0;
+}
+
+#gridDesignControls label {
+  display: block;
+  margin-bottom: 5px;
+}
+
+#gridDesignControls select {
+  width: 100%;
+  min-height: 40px;
+}
+
+.ratio-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ratio-inputs input {
+  width: min(100px, 40%);
+}
+
+#gridDesignControls .grid-help {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+body[data-tool="grid"] #assetPanel {
+  grid-row: 3;
+}
+
+body[data-tool="grid"] #gridControls {
+  grid-row: 4;
+}
+
+body[data-tool="grid"] #gridPreviewPanel {
+  grid-row: 3 / span 2;
+}
+
+@media (max-width: 800px) {
+  #gridDesignControls {
+    grid-row: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    order: 1;
+  }
+  #gridDesignControls > div:first-child { grid-column: 1 / -1; }
+  body[data-tool="grid"] #assetPanel,
+  body[data-tool="grid"] #gridControls,
+  body[data-tool="grid"] #gridPreviewPanel { grid-row: auto; }
+}
+
+.grid-help {
+  margin-top: 10px;
+  color: var(--v14-muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
 #gridControls input[type="number"],
 #gridControls select {
   width: 100% !important;

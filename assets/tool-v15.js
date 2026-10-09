@@ -7,6 +7,8 @@ const $ = id => document.getElementById(id);
 let images = [];      // { img, name, url }
 let lastBlob = null;
 let mode = 'grid';
+let gridPreviewTimer=0, gridRevision=0, gridExportBusy=false;
+let pendingImageCount=0, imageUploadRevision=0;
 
 // 表格状态
 let tRows = 3, tCols = 3;
@@ -149,6 +151,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
     $('paintPanel').classList.toggle('hidden',!paintMode);
     $('portraitPanel').classList.toggle('hidden',!portraitMode);
     $('gridControls').classList.toggle('hidden',!g);
+    $('gridDesignControls').classList.toggle('hidden',!g);
     $('gridPreviewPanel').classList.toggle('hidden',!g);
     $('tableControls').classList.toggle('hidden',!tableMode);
     $('tableStagePanel').classList.toggle('hidden',!tableMode);
@@ -168,21 +171,31 @@ uploadArea.addEventListener('dragover',e=>{ e.preventDefault(); uploadArea.class
 uploadArea.addEventListener('dragleave',()=>uploadArea.classList.remove('dragover'));
 uploadArea.addEventListener('drop',e=>{ e.preventDefault(); uploadArea.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
 
-function handleFiles(files){
+async function handleFiles(files){
   let arr = Array.from(files).filter(f=>f.type.startsWith('image/'));
   const big = arr.filter(f=>f.size>MAX_FILE_BYTES);
   if(big.length){ alert('图片上传失败：图片文件不能超过 50MB\n\n超限：\n'+big.map(f=>`· ${f.name}（${(f.size/1048576).toFixed(1)} MB）`).join('\n')); arr = arr.filter(f=>f.size<=MAX_FILE_BYTES); }
   if(mode==='grid'){
-    const rem = MAX_IMAGES-images.length;
+    const rem = MAX_IMAGES-images.length-pendingImageCount;
     if(rem<=0){ alert(`自动网格最多 ${MAX_IMAGES} 张`); return; }
     if(arr.length>rem){ alert(`自动网格超出 ${MAX_IMAGES} 张，已取前 ${rem} 张`); arr = arr.slice(0,rem); }
   }
-  arr.forEach(file=>{
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = ()=>{ const rec={img,name:file.name,url,thumbUrl:makeThumb(img)}; images.push(rec); render(); };
-    img.src = url;
-  });
+  const revision=imageUploadRevision;
+  pendingImageCount+=arr.length;
+  // Decode in parallel but append in the user's selection order, not load order.
+  const loaded=await Promise.all(arr.map(file=>new Promise(resolve=>{
+    const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>resolve({img,name:file.name,url,thumbUrl:makeThumb(img)});
+    img.onerror=()=>{ URL.revokeObjectURL(url); resolve(null); };
+    img.src=url;
+  })));
+  pendingImageCount=Math.max(0,pendingImageCount-arr.length);
+  const valid=loaded.filter(Boolean);
+  if(revision!==imageUploadRevision){ valid.forEach(item=>URL.revokeObjectURL(item.url)); return; }
+  images.push(...valid);
+  render();
+  if(mode==='table') renderTable();
+  if(valid.length<arr.length) alert('部分图片无法读取，请确认图片文件有效。');
 }
 
 /* 生成显示用缩略图（最大边 THUMB_MAX），大幅降低渲染开销；导出仍用原图 */
@@ -218,10 +231,13 @@ function render(){
 
   const n = images.length;
   if(mode==='grid'){
-    const cols = n===9?3:2, rows = Math.ceil(n/cols);
-    const gi = n>=MIN_IMAGES?`<span class="grid-info">${rows} 行 × ${cols} 列${n===9?'（九宫格）':''}</span>`:'';
+    const plan=n>=MIN_IMAGES ? getGridPlan() : null;
+    const label=$('gridLayout').selectedOptions[0].textContent;
+    const gi=plan?`<span class="grid-info">${label} · ${plan.width}×${plan.height}</span>`:'';
     statusEl.innerHTML=`已选 <strong>${n} / ${MAX_IMAGES}</strong> 张 ${gi}`;
-    $('generateBtn').disabled = n<MIN_IMAGES; $('downloadBtn').disabled=true; lastBlob=null;
+    $('generateBtn').disabled = n<MIN_IMAGES||gridExportBusy; $('downloadBtn').disabled=true; lastBlob=null;
+    gridRevision++;
+    scheduleGridPreview();
   } else if(mode==='table') {
     let filled=0; for(let r=0;r<tRows;r++)for(let c=0;c<tCols;c++) if(cells[r][c]!==null) filled++;
     statusEl.innerHTML=`素材 <strong>${n}</strong> 张 · 表格 ${tRows}×${tCols} · 已填 <strong>${filled}</strong> 格`;
@@ -251,30 +267,83 @@ function setupGridDragSort(){
   });
 }
 
-/* ========= 自动网格：生成（沿用） ========= */
+/* ========= 拼图排版、比例、适配与实时预览 ========= */
+function getGridPlan(){
+  const selected=$('gridRatio').value;
+  const ratio=selected==='auto' ? 'auto' : selected==='custom'
+    ? Math.max(1,Number($('gridRatioW').value)||1)/Math.max(1,Number($('gridRatioH').value)||1)
+    : selected.split(':').map(Number).reduce((w,h)=>w/h);
+  return CollageLayout.plan(images.length,{
+    layout:$('gridLayout').value,ratio,gap:$('gap').value,longEdge:$('gridLongEdge').value,
+    sizes:images.map(item=>({width:item.img.naturalWidth,height:item.img.naturalHeight}))
+  });
+}
+
+function drawGrid(canvas,plan,items,fit,bg,maxEdge=Infinity){
+  const scale=Math.min(1,maxEdge/Math.max(plan.width,plan.height));
+  canvas.width=Math.max(1,Math.round(plan.width*scale));
+  canvas.height=Math.max(1,Math.round(plan.height*scale));
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle=bg;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.imageSmoothingQuality='high';
+  plan.cells.forEach((cell,index)=>{
+    const x=Math.round(cell.x*scale),y=Math.round(cell.y*scale);
+    const scaled={x,y,width:Math.round((cell.x+cell.width)*scale)-x,height:Math.round((cell.y+cell.height)*scale)-y};
+    const img=items[index].img;
+    const p=CollageLayout.placement(img.naturalWidth,img.naturalHeight,scaled,fit);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(scaled.x,scaled.y,scaled.width,scaled.height); ctx.clip();
+    ctx.drawImage(img,p.sx,p.sy,p.sw,p.sh,p.dx,p.dy,p.dw,p.dh);
+    ctx.restore();
+  });
+}
+
+function scheduleGridPreview(){
+  clearTimeout(gridPreviewTimer);
+  gridPreviewTimer=setTimeout(()=>{
+    if(mode!=='grid') return;
+    const cv=$('previewCanvas');
+    if(images.length<MIN_IMAGES){ cv.style.display='none'; $('emptyHint').style.display='grid'; return; }
+    try{
+      const plan=getGridPlan();
+      drawGrid(cv,plan,images,$('gridFit').value,$('bgColor').value,1280);
+      cv.dataset.outputWidth=plan.width; cv.dataset.outputHeight=plan.height;
+      cv.style.display='block'; $('emptyHint').style.display='none';
+    }catch(error){ alert('预览失败：'+error.message); }
+  },100);
+}
+
+function updateGridSettings(){
+  $('gridCustomRatio').hidden=$('gridRatio').value!=='custom';
+  const notes={cover:'图片等比铺满格子，会裁切边缘，不会拉伸变形。',contain:'保留整张图片，不裁切；比例不同的图片可能出现留边。',stretch:'图片铺满格子且不裁切，但比例不同时会拉伸变形。'};
+  $('gridFitHint').textContent=notes[$('gridFit').value]+' 拖动缩略图可调整顺序；主图布局使用第一张图片。';
+  render();
+}
+['gridLayout','gridRatio','gridFit','gridLongEdge','gridRatioW','gridRatioH','gap','bgColor','format','quality'].forEach(id=>{
+  $(id).addEventListener('input',updateGridSettings);
+});
+
 function generate(){
-  const n=images.length; if(n<MIN_IMAGES)return;
-  const gap=Math.max(0,parseInt($('gap').value)||0), bg=$('bgColor').value;
-  const cols=n===9?3:2, rowsArr=[];
-  for(let i=0;i<n;i+=cols) rowsArr.push(images.slice(i,i+cols));
-  const rH=rowsArr.map(r=>Math.max(...r.map(it=>it.img.naturalHeight)));
-  const cW=[]; for(let c=0;c<cols;c++){let m=0;rowsArr.forEach(r=>{if(r[c])m=Math.max(m,r[c].img.naturalWidth);});cW[c]=m;}
-  let W=cW.reduce((a,b)=>a+b,0)+gap*(cols-1), H=rH.reduce((a,b)=>a+b,0)+gap*(rowsArr.length-1);
-  let scale=Math.min(MAX_CANVAS_SIDE/W,MAX_CANVAS_SIDE/H,Math.sqrt(MAX_CANVAS_PIXELS/(W*H)),1);
-  if(scale<1){ if(!confirm(`画布将达 ${W}×${H}，超出上限。\n确定=缩放至 ${Math.round(scale*100)}% 继续；取消=放弃。`))return; W=Math.round(W*scale);H=Math.round(H*scale); }
-  const btn=$('generateBtn'); btn.disabled=true; btn.textContent='生成中...'; $('downloadBtn').disabled=true; lastBlob=null;
-  const cv=$('previewCanvas');
+  if(images.length<MIN_IMAGES||gridExportBusy) return;
+  const revision=gridRevision,items=images.slice(),plan=getGridPlan();
+  const fit=$('gridFit').value,bg=$('bgColor').value,format=$('format').value,quality=parseInt($('quality').value)||95;
+  const btn=$('generateBtn');
+  gridExportBusy=true; btn.disabled=true; btn.textContent='生成中...'; $('downloadBtn').disabled=true; lastBlob=null;
+  const finish=()=>{ gridExportBusy=false; btn.disabled=images.length<MIN_IMAGES; btn.textContent='生成拼图'; };
   setTimeout(()=>{ try{
-    cv.width=W; cv.height=H; const ctx=cv.getContext('2d'); ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
-    let y=0; rowsArr.forEach((row,ri)=>{ let x=0; for(let c=0;c<cols;c++){ const cell=row[c]; if(cell){ const w=cell.img.naturalWidth*scale,h=cell.img.naturalHeight*scale; ctx.drawImage(cell.img,x+(cW[c]*scale-w)/2,y+(rH[ri]*scale-h)/2,w,h);} x+=cW[c]*scale+gap; } y+=rH[ri]*scale+gap; });
-    cv.style.display='block'; $('emptyHint').style.display='none'; btn.textContent='编码中...';
-    exportUnder50(cv,$('format').value,parseInt($('quality').value)||95,res=>{
-      btn.disabled=false; btn.textContent='生成拼图';
+    const output=document.createElement('canvas');
+    drawGrid(output,plan,items,fit,bg);
+    btn.textContent='编码中...';
+    exportUnder50(output,format,quality,res=>{
+      finish();
+      // Changes made while encoding invalidate the old export, not the new preview.
+      if(revision!==gridRevision||mode!=='grid') return;
       if(!res){ alert('生成失败：画布超出编码能力。'); return; }
       lastBlob=res; $('downloadBtn').disabled=false;
       statusEl.innerHTML=statusEl.innerHTML.replace(/\s·\s输出.*$/,'')+` · 输出 ${res.w}×${res.h} · ${(res.blob.size/1048576).toFixed(2)} MB${res.note?' · '+res.note:''}`;
     });
-  }catch(err){ btn.disabled=false; btn.textContent='生成拼图'; alert('生成失败：'+(err.message||err)); } },50);
+  }catch(err){ finish(); alert('生成失败：'+(err.message||err)); } },50);
 }
 
 /* ========= 限制大小导出（默认 50MB，可传入更小目标）========= */
@@ -314,7 +383,7 @@ function downloadBlob(res,prefix){
 
 $('generateBtn').addEventListener('click',generate);
 $('downloadBtn').addEventListener('click',()=>downloadBlob(lastBlob,`多宫格拼图_${images.length}张`));
-$('clearBtn').addEventListener('click',()=>{ if(images.length&&!confirm('确定清空所有图片？'))return; images.forEach(it=>URL.revokeObjectURL(it.url)); images=[]; initCells(); lastBlob=null; $('previewCanvas').style.display='none'; $('emptyHint').style.display='block'; render(); renderTable(); });
+$('clearBtn').addEventListener('click',()=>{ if(images.length&&!confirm('确定清空所有图片？'))return; imageUploadRevision++; images.forEach(it=>URL.revokeObjectURL(it.url)); images=[]; initCells(); lastBlob=null; $('previewCanvas').style.display='none'; $('emptyHint').style.display='grid'; render(); renderTable(); });
 
 /* ========= 网格表格画布 ========= */
 /* ========= 网格表格画布 ========= */

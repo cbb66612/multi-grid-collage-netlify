@@ -24,7 +24,7 @@ const iconCSS = `/* Bootstrap Icons v1.11.3, MIT, Copyright The Bootstrap Author
 .bi::before{display:inline-block;font-family:bootstrap-icons!important;font-style:normal;font-weight:400!important;font-variant:normal;text-transform:none;line-height:1;vertical-align:-.125em;-webkit-font-smoothing:antialiased}${iconRules}`;
 html = html.replace(/<link rel="stylesheet" href="assets\/icons\/bootstrap-icons\.min\.css">|<style id="tool-icons">[\s\S]*?<\/style>/, `<style id="tool-icons">${iconCSS}</style>`);
 html = html.replace(/<style([^>]*)>([\s\S]*?)<\/style>/g, (_, attrs, css) => `<style${attrs}>${minifyCSS(css)}</style>`);
-html = html.replace(/<script(?: defer)? src="assets\/(tool-v15|app-v14)\.js(?:\?v=[a-f0-9]+)?"><\/script>/g,
+html = html.replace(/<script(?: defer)? src="assets\/(collage-layout-v16|tool-v15|app-v14)\.js(?:\?v=[a-f0-9]+)?"><\/script>/g,
   (_, name) => `<script defer src="assets/${name}.js?v=${hash(read(`assets/${name}.js`))}"></script>`);
 fs.writeFileSync(path.join(root, 'index.html'), html);
 console.log(`Fast shell: ${Buffer.byteLength(html)} bytes; ${iconNames.size} icon rules; no external blocking stylesheets.`);
