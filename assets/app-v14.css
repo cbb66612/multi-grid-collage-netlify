@@ -31,7 +31,8 @@ body {
   min-height: 100dvh !important;
   padding-left: var(--v14-sidebar-w) !important;
   color: var(--v14-text) !important;
-  background: var(--v14-bg) !important;
+  background: transparent !important;
+  isolation: isolate;
 }
 
 .skip-link {
@@ -52,14 +53,37 @@ body {
 }
 
 .cinematic-bg-video {
-  opacity: 0.34 !important;
-  filter: saturate(0.72) contrast(1.06) brightness(0.72) !important;
+  opacity: 1 !important;
+  filter: none !important;
 }
 
 .cinematic-bg-scrim {
   background:
-    linear-gradient(90deg, rgba(6, 8, 11, 0.94), rgba(7, 10, 14, 0.78) 44%, rgba(6, 8, 11, 0.88)),
-    linear-gradient(180deg, rgba(7, 9, 12, 0.24), rgba(7, 9, 12, 0.72)) !important;
+    linear-gradient(90deg, rgba(6, 8, 11, 0.68), rgba(7, 10, 14, 0.30) 44%, rgba(6, 8, 11, 0.48)),
+    linear-gradient(180deg, rgba(7, 9, 12, 0.06), rgba(7, 9, 12, 0.30)) !important;
+}
+
+/* Show the first film frame before the video has buffered. */
+.cinematic-bg-poster {
+  position: fixed;
+  inset: 0;
+  z-index: -4;
+  background: #050609 url("/assets/video/red-cloak-poster-v15.webp") center / cover no-repeat;
+  pointer-events: none;
+}
+
+#emptyHint {
+  padding: 0;
+  min-height: inherit;
+  display: grid;
+  place-items: center;
+}
+
+#emptyHint img {
+  width: 100%;
+  height: 100%;
+  max-height: min(66vh, 720px);
+  object-fit: contain;
 }
 
 .app-sidebar {
@@ -73,6 +97,11 @@ body {
 .dragon-stage {
   height: 108px !important;
   flex-basis: 108px !important;
+}
+
+.dragon-stage:not(.dragon-ready) .dragon-rest {
+  display: block !important;
+  opacity: 1 !important;
 }
 
 .side-nav {
@@ -197,6 +226,10 @@ h1 {
 #assetPanel .upload-area,
 #assetPanel .thumbnails {
   grid-column: 1 !important;
+}
+
+#assetPanel.hidden {
+  display: none !important;
 }
 
 #assetPanel .info {
