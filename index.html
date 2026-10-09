@@ -1494,8 +1494,10 @@
     .cinematic-bg-scrim{ background:rgba(4,6,9,.76) !important; }
   }
 </style>
+<link rel="stylesheet" href="assets/app-v14.css">
 </head>
 <body>
+<a class="skip-link" href="#main">跳到主要工作区</a>
 <video id="cinematicBg" class="cinematic-bg-video" autoplay muted loop playsinline preload="metadata" poster="assets/video/red-cloak-poster.jpg" aria-hidden="true">
   <source src="assets/video/red-cloak-warrior-lite.mp4" type="video/mp4">
 </video>
@@ -1519,13 +1521,12 @@
   </nav>
   <div class="side-footer">
     <button type="button" class="video-toggle" id="videoToggle" aria-pressed="false" title="暂停或继续背景视频"><i class="bi bi-pause-fill"></i><span>暂停背景</span></button>
-    <div><i class="bi bi-gear"></i><span>设置</span></div>
-    <div><i class="bi bi-clock-history"></i><span>本地记录</span></div>
-    <div><i class="bi bi-book"></i><span>使用指南</span></div>
+    <a href="docs/competitive-analysis.md" target="_blank" rel="noopener"><i class="bi bi-bar-chart"></i><span>竞品分析</span></a>
+    <a href="docs/PRD-v1.4-redesign.md" target="_blank" rel="noopener"><i class="bi bi-journal-text"></i><span>产品 PRD</span></a>
     <div class="local-badge"><i class="bi bi-shield-check"></i><span>所有处理均在本地完成</span></div>
   </div>
 </aside>
-<div class="container">
+<main class="container" id="main">
   <div class="hero-shell">
     <section class="hero-copy">
       <div>
@@ -1562,10 +1563,10 @@
   <!-- 自动网格控制条 -->
   <div class="panel" id="gridControls">
     <div class="row">
-      <div><label>图片间距</label> <input type="number" id="gap" value="0" min="0" max="100"> <span style="font-size:12px;color:#6b7785;">px</span></div>
-      <div><label>背景色</label> <input type="color" id="bgColor" value="#ffffff"></div>
-      <div><label>输出格式</label> <select id="format"><option value="image/png">PNG</option><option value="image/jpeg">JPG</option></select></div>
-      <div><label>JPG质量</label> <input type="number" id="quality" value="95" min="1" max="100"></div>
+      <div><label for="gap">图片间距</label> <input type="number" id="gap" value="0" min="0" max="100"> <span style="font-size:12px;color:#6b7785;">px</span></div>
+      <div><label for="bgColor">背景色</label> <input type="color" id="bgColor" value="#ffffff" aria-label="选择拼图背景色"></div>
+      <div><label for="format">输出格式</label> <select id="format"><option value="image/png">PNG</option><option value="image/jpeg">JPG</option></select></div>
+      <div><label for="quality">JPG质量</label> <input type="number" id="quality" value="95" min="1" max="100"></div>
       <button id="generateBtn" disabled>生成拼图</button>
       <button id="downloadBtn" class="secondary" disabled>下载</button>
       <button id="clearBtn" class="danger">清空</button>
@@ -1807,7 +1808,7 @@
     <div class="preview-title">拼图预览</div>
     <div id="previewWrap">
       <div class="empty-preview" id="emptyHint">
-        <img src="assets/demo-travel-collage.png" alt="多宫格旅行图片拼图示例">
+        <img src="assets/demo-travel-collage.png" alt="多宫格旅行图片拼图示例" loading="lazy" decoding="async">
         <span>演示预览 · 添加图片后生成你的拼图</span>
       </div>
       <canvas id="previewCanvas" style="display:none;"></canvas>
@@ -1839,13 +1840,10 @@
       <img id="exportPreviewImg" style="display:none; max-width:100%; height:auto; box-shadow:0 4px 20px rgba(0,0,0,.5);">
     </div>
   </div>
-</div>
+</main>
 
 <div id="dragGhost"><img></div>
 <input type="file" id="cellFileInput" accept="image/*" style="display:none;">
-<script src="assets/portrait/ort.min.js"></script>
-<script src="assets/portrait/ort-wasm-data.js"></script>
-<script src="assets/portrait/portrait-model-data.js"></script>
 <script>
 /* ========= 全局 ========= */
 const MAX_IMAGES = 9, MIN_IMAGES = 2;
@@ -3095,6 +3093,7 @@ let portraitSourceUrl=null;
 let portraitResultBlob=null;
 let portraitResultUrl=null;
 let portraitSessionPromise=null;
+let portraitRuntimePromise=null;
 let portraitWasmUrl=null;
 let portraitBusy=false;
 
@@ -3186,9 +3185,45 @@ function base64ToBytes(base64){
   return bytes;
 }
 
+function loadPortraitScript(src){
+  return new Promise((resolve,reject)=>{
+    const existing=document.querySelector(`script[data-portrait-src="${src}"]`);
+    if(existing){
+      if(existing.dataset.loaded==='true') resolve();
+      else{
+        existing.addEventListener('load',resolve,{once:true});
+        existing.addEventListener('error',()=>reject(new Error(`无法加载 ${src}`)),{once:true});
+      }
+      return;
+    }
+    const script=document.createElement('script');
+    script.src=src;
+    script.async=false;
+    script.dataset.portraitSrc=src;
+    script.addEventListener('load',()=>{ script.dataset.loaded='true'; resolve(); },{once:true});
+    script.addEventListener('error',()=>{ script.remove(); reject(new Error(`无法加载 ${src}`)); },{once:true});
+    document.head.appendChild(script);
+  });
+}
+
+function ensurePortraitRuntime(){
+  if(window.ort&&window.__PORTRAIT_ORT_WASM_BASE64&&window.__PORTRAIT_MODEL_BASE64) return Promise.resolve();
+  if(portraitRuntimePromise) return portraitRuntimePromise;
+  setPortraitStatus('正在准备本地抠图模型，首次使用需要稍等…');
+  portraitRuntimePromise=loadPortraitScript('assets/portrait/ort.min.js')
+    .then(()=>loadPortraitScript('assets/portrait/ort-wasm-data.js'))
+    .then(()=>loadPortraitScript('assets/portrait/portrait-model-data.js'))
+    .catch(error=>{
+      portraitRuntimePromise=null;
+      throw error;
+    });
+  return portraitRuntimePromise;
+}
+
 async function getPortraitSession(){
   if(portraitSessionPromise) return portraitSessionPromise;
   portraitSessionPromise=(async()=>{
+    await ensurePortraitRuntime();
     if(!window.ort) throw new Error('内置推理程序未加载，请确认 assets/portrait 文件夹完整。');
     if(!window.__PORTRAIT_ORT_WASM_BASE64||!window.__PORTRAIT_MODEL_BASE64){
       throw new Error('内置轻量模型资源不完整，请重新完整解压工具文件夹。');
@@ -3540,5 +3575,6 @@ if(reduceMotion.addEventListener){
 }
 
 </script>
+<script src="assets/app-v14.js"></script>
 </body>
 </html>

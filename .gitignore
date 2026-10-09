@@ -1,4 +1,5 @@
 .netlify/
+.finesse/
 .env
 .env.*
 !.env.example

@@ -1,0 +1,55 @@
+# design-model.yaml — 多宫格拼图工具的界面基线
+meta:
+  name: multi-grid-collage
+  industry: local-image-utility
+  register: product
+  persona: cinematic-precision-workbench
+  design_read: "本地图片处理 · 精密影像工作台 · 保留电影背景与持续动画小黑龙"
+
+dials:
+  soul: 5
+  spectacle: 4
+  density: 7
+
+color:
+  bg: "#07090C"
+  surface: "rgba(16,19,24,0.88)"
+  ink: "#F3F4F6"
+  muted: "#A2A8B2"
+  dim: "#747B86"
+  accent: "#EF5B4F"
+  success: "#54D6A0"
+  warning: "#F4BD62"
+  error: "#FF7B73"
+  border: "rgba(226,232,240,0.12)"
+  strategy: restrained
+
+type:
+  display: "system sans-serif"
+  display_weight: 760
+  body: "system sans-serif"
+  body_weight: 400
+  scale_ratio: 1.25
+  display_tracking: "-0.025em"
+  display_leading: 1.05
+
+substrate:
+  radius_scale: "10px"
+  motion_easing: "ease"
+  cinematic_background: true
+  animated_dragon: true
+  reduced_motion: "pause video and freeze dragon on its resting frame"
+
+structure:
+  shell: rail-inspector-canvas
+  navigation: single-tool-rail
+  desktop_columns: [tool-rail, input-and-settings, preview-canvas]
+  mobile_flow: [current-tool, preview, input, settings, actions]
+
+protection_rules:
+  - keep-all-five-existing-tools
+  - keep-processing-local
+  - keep-cinematic-background
+  - keep-continuously-animated-dragon
+  - preserve-export-results
+

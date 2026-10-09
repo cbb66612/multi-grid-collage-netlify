@@ -11,5 +11,6 @@
 ## 产品资料
 
 - [产品基线](PRODUCT.md)
+- [界面设计基线](design-model.yaml)
 - [竞品分析](docs/competitive-analysis.md)
 - [v1.4 工作台改版 PRD](docs/PRD-v1.4-redesign.md)
